@@ -1,5 +1,6 @@
 import numpy as np
 from fractions import Fraction
+import math
 ## Basic Tableau generator
 # Basic Simplex
 # Get objective function in OG Variables(x1,x2,...xn)
@@ -61,31 +62,162 @@ def parse_input(input_file):
 	#note now cst must be positive
 	return n, m, obj, abs(cst), updated_cst, ssa_cst
 
-def phase1():
-	pass
 
-def phase2():
-	pass
+def find_increaser(vector, pivot_rule = "max"):
+	column = 0
+	if pivot_rule == "max":
+		column = max_coe(vector) # gives which x_c to choose.
+	if vector[column] >= 0:
+		return -1 #no -ve coeff found, therefore no more increase possible  
+	return column
 
-def pivot():
-	pass
-	# should also swap basis and non basis variable
+def max_coe(vector):
+	return np.argmin(vector[1:-1]) + 1 #gives which x_c to pivot on
 
-def max_coe():
-	pass
 def bland_choice():
 	pass
+
 def random_choice():
 	pass
 
+def ratio_test_phase2(v1, v2):
+	# Yet to handle the degeneracy conditions, how to fixe --> pick row witht the lowest numbered variable in the basis
+	# ratios = v2[1:] / v1[1:]
+	v1 = v1[1:]; v2 = v2[1:]
+	# can be optimized
+	min_posval = math.inf
+	flag = 0 # flag for existence of upper bound till where the variable can be increased
+	for i in range(len(v1)):
+		lhs = v1[i]; rhs = v2[i]
+		if lhs <= 0:
+			continue # that variable doesnt appear in this constraint pass, or gives a useless constraint
+
+		ratio = rhs / lhs
+		if ratio < 0:
+			print("BIZARRE!!")
+			continue
+
+		if ratio < min_posval: # if we reach here it implies the ratio is >=0, yet to implement blands condition
+			min_posval = ratio
+			min_index = i
+			flag = 1
+		# if rhs/lhs >= 0:
+		# 	if ratios[i] < min_posval:
+		# 		min_posval = ratios[i]
+		# 		min_index = i
+		# 		flag = 1
+
+	if flag == 0: # no x_c < bound found
+		return -1
+	return min_index + 1
+
+
+def phase2(tableau, basic_in_row):
+	while(find_increaser(tableau[0]) != -1): # while there exists a non basic variable to increase along
+		col = find_increaser(tableau[0])
+		pivot_row = ratio_test_phase2(tableau[:,col], tableau[:,-1])
+		if pivot_row == -1:
+			return "UB"
+		tableau, basic_in_row =  pivot(tableau, pivot_row, col, basic_in_row)        
+	return tableau[0,-1] #maximum value
+
+def pivot(tableau, pivot_row, col, basic_in_row):
+	# should also swap basis and non basis variable
+	basic_in_row[pivot_row] = col
+	tableau[pivot_row] = tableau[pivot_row] / tableau[pivot_row, col]# generates a 1 at (pr,col)
+	# can be optimized
+	for i in range(len(tableau)):
+		if i == pivot_row:
+			continue
+		tableau[i] = tableau[i] - (tableau[i,col]) * tableau[pivot_row]
+	return tableau, basic_in_row
+
+
+
+def phase1(tableau, basic_in_row):
+	while(find_increaser(tableau[0]) != -1):
+		col = find_increaser(tableau[0])
+		pivot_row = ratio_test_phase2(tableau[:,col], tableau[:,-1])
+		tableau, basic_in_row = pivot(tableau, pivot_row, col, basic_in_row)
+	if tableau[0,-1] != 0:
+		return tableau, basic_in_row, "infeasible"
+	return tableau, basic_in_row, "feasible"
+
+def normalize(n, tableau, basic_in_row):
+	#normalization after phase1 gives feasible
+	for i in range(1,n+1):
+		row_pos = np.where(basic_in_row == i)[0]
+		if not np.array_equal(row_pos,[]):
+			tableau[0] = tableau[0] - tableau[0, i] * tableau[row_pos] ##
+	return tableau 
+
+
 def solve(input_file):
-	n, m, obj, abs(cst), updated_cst, ssa_cst = parse_input(input_file)
+	n, m, obj, cst, updated_cst, ssa_cst = parse_input(input_file)
+	# print(n,m)
+	# print(obj, type(obj))
+	# print(cst, type(cst))
+	# print(updated_cst, type(updated_cst))
+	# print(ssa_cst, type(ssa_cst))
+
 	if np.sum(ssa_cst[:,1:]) == 0:
-		#Go directly to Phase2, as there are no surplus or artificial variables
+	  # print("Yeah boii")
+
+	  tableau_direct = np.zeros((m+1, n+m+2), dtype=Fraction)
+	  # nb_vars = #all the OG variables
+	  # b_vars = # all the slack
+	  tableau_direct[0,1:n+1] = -1 * obj#objective function
+	  for j in range(1,m+1):
+	      tableau_direct[j,1:n+1] = updated_cst[j-1]
+	      tableau_direct[j,n+j] = 1
+	      tableau_direct[j,-1] = cst[j-1]
+	  basic_in_row  = np.array(np.append([-2],[n+j for j in range(1,m+1)]),dtype=int) # basic variable associated with particular row
+	  # print(tableau_direct)
+	  # print(basic_in_row)
+	  Opval = phase2(tableau_direct, basic_in_row)
+	  if Opval == "UB":
+	  	print("UNBOUNDED")
+	  else:
+	  	print(Opval)
+	
 	else:
-		#Go to Phase1
-		#Process
-		#Go to Phase2
+		tot_extra = np.sum(ssa_cst)
+		tot_slsu = np.sum(ssa_cst[:,0:2]) # total number of slack and surplus vars	
+		tableau = np.zeros((m+1, n + tot_extra + 2), dtype = Fraction)
+		basic_in_row = np.zeros(m+1,dtype=int); basic_in_row[0] = -2 # some dummy value
+		tableau[0, n+tot_slsu+1 : -1] = np.ones(tot_extra - tot_slsu, dtype=Fraction) # artifical vars
+		k = 0; l = 0 # shifters for the slack cols and artficial cols
+		for j in range(1, m+1):
+			tableau[j,1:n+1] = updated_cst[j-1]
+			tableau[j,-1] = cst[j-1]
+			if np.array_equal(ssa_cst[j-1], [1,0,0]):
+				tableau[j, n+k+1] =  1
+				basic_in_row[j] = n+k+1
+				k+=1
+			elif np.array_equal(ssa_cst[j-1], [0,1,1]):
+				tableau[j, n+k+1] =  -1
+				tableau[j, n+tot_slsu+l+1] = 1
+				basic_in_row[j] = n+tot_slsu+l+1
+				tableau[0] = tableau[0] - tableau[j]  # removing the artifical var from obj fun (only non basic in obj func)
+				k+=1
+				l+=1
+			else: # the case [0,0,1]
+				tableau[j, n+tot_slsu+l+1] = 1
+				basic_in_row[j] = n+tot_slsu+l+1
+				tableau[0] = tableau[0] - tableau[j] # removing the artifical var from obj fun (only non basic in obj func)
+				l+=1
+		tableau, basic_in_row, status = phase1(tableau, basic_in_row)
+		if status == "infeasible": #also all the artificial vars must be basic
+			print("INFEASIBLE")
+		else:
+			tableau[0] = 0 * tableau[0] 
+			tableau[0, 1:n+1] = -1 * obj
+			tableau = np.delete(tableau,range(n+tot_slsu+1, n+tot_extra+1), axis=1) # must drop all the artificial variables
+			tableau = normalize(n, tableau, basic_in_row)
+			Opval = phase2(tableau, basic_in_row)
+			if Opval == "UB":
+				print("UNBOUNDED")
+			else:
+				print(Opval)
 
-
-solve('ip2.txt')
+solve('km.txt')
