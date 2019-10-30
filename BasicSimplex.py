@@ -134,7 +134,7 @@ def ratio_test_phase2(v1, v2):
         return -1
     return min_index + 1
 
-def phase2(tableau, basic_in_row, rule = "max"):
+def phase2(tableau, basic_in_row, rule = "max", verbose=False):
     status = "bounded"; num_pivots = 0# number of pivots used in phase2
     while(find_increaser(tableau[0], rule) != -1): # while there exists a non basic variable to increase along
         col = find_increaser(tableau[0], rule)
@@ -142,13 +142,39 @@ def phase2(tableau, basic_in_row, rule = "max"):
         if pivot_row == -1:
             status = "unbounded"
             break
-        tableau, basic_in_row =  pivot(tableau, pivot_row, col, basic_in_row)
+        tableau, basic_in_row =  pivot(tableau, pivot_row, col, basic_in_row, verbose)
         num_pivots += 1
     return tableau, basic_in_row, status, num_pivots
 
+def pivot_printing(tableau, basis_leaving_variable, col, basic_in_row):
+    print("The entering variable is x_"+str(col))
+    print("The leaving variable is x_"+str(basis_leaving_variable))
+    print("\n")
+    br_inv = basic_in_row.inverse
+    for basic_var in sorted(br_inv):
+        row = tableau[br_inv[basic_var]]
+        print("x_" + str(basic_var)+" = "+str(row[-1]), end = " ")     
+        for i in range(1, len(tableau[0])-1):
+            if i == basic_var:
+                continue
+            if row[i] > 0:
+                print(str(-1*row[i])+"x_"+str(i),end=" ")
+            elif row[i] < 0:
+                print("+" + str(-1*row[i])+"x_"+str(i),end=" ")
+        print()
+    print("-------------------------------------------------")
+    print("z = "+ str(tableau[0,-1]),end = " ")
+    for i in range(1,len(tableau[0])-1):
+        if tableau[0,i] > 0:
+            print(str(-1*tableau[0, i])+"x_"+str(i),end=" ")
+        elif tableau[0,i] < 0:
+            print("+" + str(-1*tableau[0, i])+"x_"+str(i),end=" ")
+    print("\n\n")        
+
 def pivot(tableau, pivot_row, col, basic_in_row, verbose = False):
     # should also swap basis and non basis variable
-    basic_in_row[pivot_row] = col
+    basis_leaving_variable = basic_in_row[pivot_row]
+    basic_in_row[pivot_row] = col # col is the basis entering variable
     tableau[pivot_row] = tableau[pivot_row] / tableau[pivot_row, col]# generates a 1 at (pr,col)
     # can be vectorized?
     for i in range(len(tableau)):
@@ -157,16 +183,15 @@ def pivot(tableau, pivot_row, col, basic_in_row, verbose = False):
         tableau[i] = tableau[i] - (tableau[i,col]) * tableau[pivot_row]
 
     if verbose:
-        pass
-        # printing routine
+        pivot_printing(tableau, basis_leaving_variable, col, basic_in_row)
     return tableau, basic_in_row
 
-def phase1(tableau, basic_in_row, rule="max"):
+def phase1(tableau, basic_in_row, rule="max", verbose=False):
     num_pivots = 0
     while(find_increaser(tableau[0], rule) != -1):
         col = find_increaser(tableau[0], rule)
         pivot_row = ratio_test_phase2(tableau[:,col], tableau[:,-1])
-        tableau, basic_in_row = pivot(tableau, pivot_row, col, basic_in_row)
+        tableau, basic_in_row = pivot(tableau, pivot_row, col, basic_in_row, verbose)
         num_pivots += 1
     if tableau[0,-1] != 0:
         return tableau, basic_in_row, "infeasible", num_pivots
@@ -194,10 +219,61 @@ def interpret_solution(tableau, basic_in_row, n):
             soln[i] = tableau[basic_in_row.inverse[i],-1]
     return soln, tableau[0,-1]
 
+def initial_printing(obj, cst, updated_cst, ssa_cst, tableau, basic_in_row, verbose=False):
+    #Lot of boiler plate printing, no serious algorithms here.
+    print("The input linear program is:\n")
+    print("Maximize", end="  ")
+    for i in range(len(obj)):
+        if obj[i] < 0:
+            print(str(obj[i])+"x_"+str(i+1), end=" ")
+        elif obj[i] > 0:
+            print("+"+str(obj[i])+"x_"+str(i+1), end=" ")
+    print()
+    print("Such that")
+    for i in range(len(cst)):
+        for j in range(len(obj)):
+            if updated_cst[i,j] < 0:
+                print(str(updated_cst[i,j])+"x_"+str(j+1), end=" ")
+            elif updated_cst[i,j] > 0:
+                print("+"+str(updated_cst[i,j])+"x_"+str(j+1), end=" ")
+        if np.array_equal(ssa_cst[i], [1,0,0]):
+            print("<=",end = " ")
+        elif np.array_equal(ssa_cst[i], [0,1,1]):
+            print(">=",end = " ")
+        else:
+            print("=", end=" ")
+        print(cst[i])
+    for i in range(len(obj)):
+        print("x_"+str(i+1),end=" ; ")
+    print("are non negative\n\n")
+    if verbose:
+        print("The initial dictionary is:\n")
+        br_inv = basic_in_row.inverse
+        for basic_var in sorted(br_inv):
+            row = tableau[br_inv[basic_var]]
+            print("x_" + str(basic_var)+" = "+str(row[-1]), end = " ")     
+            for i in range(1, len(tableau[0])-1):
+                if i == basic_var:
+                    continue
+                if row[i] > 0:
+                    print(str(-1*row[i])+"x_"+str(i),end=" ")
+                elif row[i] < 0:
+                    print("+" + str(-1*row[i])+"x_"+str(i),end=" ")
+            print()
+        print("-------------------------------------------------")
+        print("z = "+ str(tableau[0,-1]),end = " ")
+        for i in range(1,len(tableau[0])-1):
+            if tableau[0,i] > 0:
+                print(str(-1*tableau[0, i])+"x_"+str(i),end=" ")
+            elif tableau[0,i] < 0:
+                print("+" + str(-1*tableau[0, i])+"x_"+str(i),end=" ")
+        print("\n\n")   
+
+
 def final_printing(soln, opval, num_pivots, n, rule):
     print("An optimal solution is:", end=" ")
     for i in range(1,n+1):
-        print("x_",i," = ",soln[i],end="; ")
+        print("x_"+str(i),"=",soln[i],end="; ")
     print()
     print("The value of the objective for this solution is: ", opval)
     print("The number of pivoting operations is: ", num_pivots)
@@ -217,13 +293,15 @@ def solve(input_file, rule="max", verbose=False):
           tableau[j,1:n+1] = updated_cst[j-1]
           tableau[j,n+j] = 1
           tableau[j,-1] = cst[j-1]
-      basic_in_row = {j: n+j for j in range(1,m+1)}; basic_in_row[0] = -2
+      basic_in_row = {j: n+j for j in range(1,m+1)};
       basic_in_row = bidict(basic_in_row)
       #basic_in_row  = np.array(np.append([-2],[n+j for j in range(1,m+1)]),dtype=int) # basic variable associated with particular row
       # print(tableau)
       # print(basic_in_row)
-      tableau, basic_in_row, status, num_pivots = phase2(tableau, basic_in_row, rule)
       print("-------------------NO PHASE I--------------------\n\n")
+      initial_printing(obj, cst, updated_cst, ssa_cst, tableau, basic_in_row, verbose)
+      print("-------------------PHASE II--------------------\n\n")
+      tableau, basic_in_row, status, num_pivots = phase2(tableau, basic_in_row, rule, verbose)
       if status == "unbounded":
         print("This linear program is UNBOUNDED")
       else:
@@ -238,7 +316,7 @@ def solve(input_file, rule="max", verbose=False):
         tot_extra = np.sum(ssa_cst)
         tot_slsu = np.sum(ssa_cst[:,0:2]) # total number of slack and surplus vars  
         tableau = np.zeros((m+1, n + tot_extra + 2), dtype = Fraction)
-        basic_in_row = bidict({0:-2})
+        basic_in_row = bidict()
         #basic_in_row = np.zeros(m+1,dtype=int); basic_in_row[0] = -2 # some dummy value
         tableau[0, n+tot_slsu+1 : -1] = np.ones(tot_extra - tot_slsu, dtype=Fraction) # artifical vars
         k = 0; l = 0 # shifters for the slack cols and artficial cols
@@ -262,7 +340,8 @@ def solve(input_file, rule="max", verbose=False):
                 tableau[0] = tableau[0] - tableau[j] # removing the artifical var from obj fun (only non basic in obj func)
                 l+=1
         print("-------------------PHASE I--------------------\n\n")
-        tableau, basic_in_row, status, num_pivots_p1 = phase1(tableau, basic_in_row, rule)
+        initial_printing(obj, cst, updated_cst, ssa_cst, tableau, basic_in_row, verbose)
+        tableau, basic_in_row, status, num_pivots_p1 = phase1(tableau, basic_in_row, rule, verbose)
         if status == "infeasible": #also all the artificial vars must be basic
             print("This linear program is INFEASIBLE")
         else:
@@ -273,11 +352,11 @@ def solve(input_file, rule="max", verbose=False):
             tableau = normalize(n, tableau, basic_in_row)
             # Opval = phase2(tableau, basic_in_row, rule)
             print("-------------------PHASE II--------------------\n\n")
-            tableau, basic_in_row, status, num_pivots_p2 = phase2(tableau, basic_in_row, rule)
+            tableau, basic_in_row, status, num_pivots_p2 = phase2(tableau, basic_in_row, rule, verbose)
             if status == "unbounded":
                 print("This linear program is UNBOUNDED")
             else:   
                 soln, opval = interpret_solution(tableau, basic_in_row, n)
                 final_printing(soln, opval, num_pivots_p1 + num_pivots_p2, n, rule)
  
-solve('ex1.txt', rule="max")
+solve('inf2.txt', rule="max", verbose=True)
