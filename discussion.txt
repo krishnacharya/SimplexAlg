@@ -1,0 +1,37 @@
+Q1 Explanation of your choice/design of the third pivot rule.
+
+	I infact implemented 2 additional pivot rules - 1) random and 2) stepmax
+
+	Random just picks randomly among those non basic variables that can increase the objective function. We discussed in class how the simplex algorithm corresponds to walking from one corner to another, so the random pivot rule can be thought of like a random walk, which will eventually land up at an optival value vertex.
+
+	Stepmax chooses a non basic variable such that when it enters the basis it increases the value of the objective function the most. (It is like a 1 look ahead). It is different from max coefficient as max coefficient just looks at the objective function. Stepmax even considers till what upper bound we can increase the variable. 
+
+	Stepmax time complexity is different from the other 3 pivot rules i.e Max, bland and random since we also need to find the upper bound till where a variable can be incresed. In particular it is O(#constraints * # non basicvars).
+
+	So why did I implement stepmax? --> It seems there is a tradeoff between number of pivoting operations and time per pivoting operation. So while stepmax can take little more time in finding the pivot, I have empirically noticed lesser number of pivots in total.
+
+Q2 What differing behavior (if any) did you find for the various pivot rules?
+
+	The max rule does not terminate on the km.dat input. whereas the other 3 rules terminate quickly to the correct value 5/4
+
+	Also the stepmax due to its definition generally takes lesser number of pivots, For e.g for the randomlp orf (in inputs/randomLPs) with 100 variables and 70 constraints (results below for one run) I get-->
+
+	Pivot rule | Num of pivots  | time
+	 step_max      157			  28.274703979492188 seconds
+	 max 		   296			  53.794090032577515 seconds
+	 bland 		   1251 		  226.031165599823 seconds
+	 random 	   450            67.78949975967407 seconds
+
+
+Q3 What were the examples of linear programs that you chose [for 2c.] and why are they interesting? i.e.
+What notable behaviour did they cause your program to exhibit?
+
+	1) The max rule does not terminate on the km.dat input. whereas the other 3 rules terminate quickly to the correct value 5/4
+	2) The degen_ex1 and degen_ex2 helped me correct a flaw in my design where I just deleted the columns corresponding to artificial variables, it turned out this cannot be done safely when there are degenerate constraints. We must first forcefully pivot this artifical variable out of the basis before going on to Phase2
+	3) The bipartite matching examples are interesting, here each constraint is associated with the vertex and the number of variables are the number of edges. There are graph theoretic algorithms for this problem that run in poly time, it was interesting to see an LP formulation. In fact some constraints may be degenerate (consider isolated vertex).
+
+Q4 To which parameter of the program is your implementation the most sensitive? The number of variables
+or the number of constraints?
+
+It seems it is more sensetive to the number of constraints. Maybe because it is the way the pivot operations are performed.
+Each pivoting is not cheap, more constraints means potentially more ratio tests, pivoting(which are essentially row operations in my numpy array of objects). 
